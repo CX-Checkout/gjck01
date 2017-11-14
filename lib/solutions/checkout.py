@@ -1,88 +1,172 @@
-def checkout(skus):
-    if not isinstance(skus, basestring):
-        return -1
-    total = 0
-    for sku in skus:
-        try:
-            total += get_sku_price(sku)
-        except InvalidSKUException:
-            return -1
+from collections import Counter
+from copy import deepcopy
+from math import floor
 
-    total -= get_special_offer_discount_for_5As(skus)
-    total -= get_special_offer_discount_for_3As(skus)
-    total -= get_special_offer_discount_for_Bs(skus)
-    total -= get_special_offer_discount_for_Es(skus)
-    total -= get_discount_for_buy_2Fs_get_1_free(skus)
+def checkout(basket):
+    if not isinstance(basket, basestring):
+        return -1
+
+    try:
+        sku_counts = get_sku_counts(basket)
+    except InvalidSKUException:
+        return -1
+
+    for offer in GET_ONE_FREE_OFFERS:
+        sku_counts = get_basket_with_free_items_removed(
+            sku_counts,
+            offer['sku_required_for_free_ones'],
+            offer['number_required'],
+            offer['free_sku'],
+        )
+
+    total = 0
+    for sku, sku_count in sku_counts.items():
+        total += (sku_count * get_sku_price(sku))
+
+    sku_ids_with_discount = [
+        k for k, v in SKUS.items() if v.get('discount_offers')
+    ]
+    for sku_id  in sku_ids_with_discount:
+        sku = SKUS[sku_id]
+        ordered_dicount_offers = sorted(
+                sku['discount_offers'],
+                key=lambda x: x['number_required'],
+                reverse=True
+        )
+        discount_offer = ordered_dicount_offers[0]
+        number_available_for_discount = sku_counts[sku_id]
+        for discount_offer in ordered_dicount_offers:
+            discount, number_available_for_discount = \
+                get_single_level_offer_discount(
+                    number_available_for_discount,
+                    discount_offer['number_required'],
+                    sku['price'],
+                    discount_offer['discounted_price'],
+                )
+            total -= discount
     return total
 
-def get_special_offer_discount_for_5As(skus):
-    items_required_for_discount = 5
-    number_of_As = len(filter(lambda x: x == 'A', skus))
-    discounted_price_of_5As = 200
-    discount_per_5As = (items_required_for_discount * Price.A) - discounted_price_of_5As
-    discount_for_As = (number_of_As / items_required_for_discount) * discount_per_5As
-    return discount_for_As
+def get_basket_with_free_items_removed(
+        sku_counts,
+        sku_required_for_free_ones,
+        number_required,
+        free_sku
+        ):
+    remainig_sku_counts = deepcopy(sku_counts)
 
-def get_special_offer_discount_for_3As(skus):
-    items_required_for_discount = 3
-    number_of_As = len(filter(lambda x: x=='A', skus))
-    discounted_price_of_3As = 130
-    discount_per_3As = (items_required_for_discount * Price.A) - discounted_price_of_3As
-    discount_for_As = ((number_of_As % 5) / items_required_for_discount) * 20
-    return discount_for_As
+    number_of_free_items = \
+        sku_counts[sku_required_for_free_ones] / number_required
+    remainig_sku_counts[free_sku] \
+        = max(sku_counts[free_sku] - number_of_free_items, 0)
+    return remainig_sku_counts
 
-def get_special_offer_discount_for_Bs(skus):
-    items_required_for_discount = 2
-    number_of_Bs = len(filter(lambda x: x == 'B', skus))
-    number_of_Es = len(filter(lambda x: x == 'E', skus))
-    discounted_price_of_2Bs = 45
-    discount_per_2Bs = (items_required_for_discount * Price.B) - discounted_price_of_2Bs
-    number_of_free_Bs_in_basket = get_number_of_free_Bs_in_basket(number_of_Bs, number_of_Es)
-    discount_for_Bs = ((number_of_Bs - number_of_free_Bs_in_basket) / items_required_for_discount) * discount_per_2Bs;
-    return discount_for_Bs
+def get_single_level_offer_discount(
+        sku_counts,
+        items_required_for_discount,
+        normal_price_per_item,
+        discounted_price):
+    discount = (items_required_for_discount * normal_price_per_item)\
+        - discounted_price
+    number_of_discounts = sku_counts / items_required_for_discount
+    discount_for_Bs = number_of_discounts * discount
+    number_of_undiscounted_items = sku_counts \
+        % items_required_for_discount
 
-def get_special_offer_discount_for_Es(skus):
-    number_of_Es = len(filter(lambda x: x == 'E', skus))
-    number_of_Bs = len(filter(lambda x: x == 'B', skus))
-    number_of_free_Bs_in_basket = get_number_of_free_Bs_in_basket(number_of_Bs, number_of_Es)
-    discount_for_Es = number_of_free_Bs_in_basket * Price.B
-    return discount_for_Es
+    return (discount_for_Bs, number_of_undiscounted_items)
 
-def get_discount_for_buy_2Fs_get_1_free(skus):
-    items_required_for_discount = 3
-    number_of_3Fs = len(filter(lambda x: x == 'F', skus))
-    discounted_price_of_3Fs = 2 * Price.F
-    discount_per_3Fs = (items_required_for_discount * Price.F) - discounted_price_of_3Fs
-    discount_for_3Fs = (number_of_3Fs / items_required_for_discount) * discount_per_3Fs
-    return discount_for_3Fs
-
-def get_number_of_free_Bs_in_basket(number_of_Bs, number_of_Es):
-    number_allowed_free_Bs = (number_of_Es / 2)
-    return min(number_allowed_free_Bs, number_of_Bs)
 
 def get_sku_price(sku):
-    if sku == 'A':
-        return Price.A
-    if sku == 'B':
-        return Price.B
-    if sku == 'C':
-        return Price.C
-    if sku == 'D':
-        return Price.D
-    if sku == 'E':
-        return Price.E
-    if sku == 'F':
-        return Price.F
-    raise InvalidSKUException()
+    sku = SKUS[sku]
+    return sku['price']
 
-class Price(object):
-    A = 50
-    B = 30
-    C = 20
-    D = 15
-    E = 40
-    F = 10
+def get_sku_counts(basket):
+    present_sku_counts = Counter(basket)
+    valid_skus = SKUS.keys()
+    if not set(list(basket)).issubset(valid_skus):
+        raise InvalidSKUException
+    sku_counts = {}
+    for sku in valid_skus:
+        sku_counts[sku] = present_sku_counts.get(sku) or 0
+
+    return sku_counts
+
+
+SKUS = {
+    'A': {'price': 50, 'discount_offers': [
+        {'number_required': 5, 'discounted_price': 200},
+        {'number_required': 3, 'discounted_price': 130}
+    ]},
+    'B': {'price': 30, 'discount_offers': [
+        {'number_required': 2, 'discounted_price': 45}
+    ]},
+    'C': {'price': 20},
+    'D': {'price': 15},
+    'E': {'price': 40},
+    'F': {'price': 10},
+    'G': {'price': 20},
+    'H': {'price': 10, 'discount_offers': [
+        {'number_required': 5, 'discounted_price': 45},
+        {'number_required': 10, 'discounted_price': 80},
+    ]},
+    'I': {'price': 35},
+    'J': {'price': 60},
+    'L': {'price': 90},
+    'M': {'price': 15},
+    'O': {'price': 10},
+    'S': {'price': 30},
+    'T': {'price': 20},
+    'W': {'price': 20},
+    'X': {'price': 90},
+    'Y': {'price': 10},
+    'Z': {'price': 50},
+    'K': {'price': 80, 'discount_offers': [
+        {'number_required': 2, 'discounted_price': 150},
+    ]},
+    'N': {'price': 40},
+    'P': {'price': 50, 'discount_offers': [
+        {'number_required': 5, 'discounted_price': 200},
+    ]},
+    'Q': {'price': 30, 'discount_offers': [
+        {'number_required': 3, 'discounted_price': 80},
+    ]},
+    'R': {'price': 50},
+    'U': {'price': 40},
+    'V': {'price': 50, 'discount_offers': [
+        {'number_required': 3, 'discounted_price': 130},
+        {'number_required': 2, 'discounted_price': 90},
+    ]},
+}
+
+# TODO: Need to sort out difference if you're getting a sku
+# of the same type for free.
+# e.g. buy 2F get on free requires 'number_required=4
+GET_ONE_FREE_OFFERS = [
+    {
+        'sku_required_for_free_ones': 'U',
+        'number_required': 4,
+        'free_sku': 'U'
+    },
+    {
+        'sku_required_for_free_ones': 'F',
+        'number_required': 3,
+        'free_sku': 'F'
+    },
+    {
+        'sku_required_for_free_ones': 'E',
+        'number_required': 2,
+        'free_sku': 'B'
+    },
+    {
+        'sku_required_for_free_ones': 'N',
+        'number_required': 3,
+        'free_sku': 'M'
+    },
+    {
+        'sku_required_for_free_ones': 'R',
+        'number_required': 3,
+        'free_sku': 'Q'
+    },
+]
 
 class InvalidSKUException(Exception):
     pass
-
