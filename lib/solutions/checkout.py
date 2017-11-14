@@ -23,6 +23,8 @@ def checkout(basket):
     for sku, sku_count in sku_counts.items():
         total += (sku_count * get_sku_price(sku))
 
+    total -= get_group_discounts(sku_counts)
+
     sku_ids_with_discount = [
         k for k, v in SKUS.items() if v.get('discount_offers')
     ]
@@ -45,6 +47,49 @@ def checkout(basket):
                 )
             total -= discount
     return total
+
+def get_group_discounts(sku_counts):
+    relevant_skus = get_string_of_skus_in_offer(
+        sku_counts,
+        GROUP_DISCOUNT_OFFER['sku_ids_in_offer']
+    )
+    sorted_relevant_skus = sorted_by_most_expensive_first(
+        relevant_skus
+    )
+    groups_to_discount = grouper(
+        sorted_relevant_skus,
+        GROUP_DISCOUNT_OFFER['number_required']
+    )
+    discount = 0
+    for group in groups_to_discount:
+
+        original_price_of_group = sum(
+            [SKUS[sku_id]['price'] for sku_id in group]
+        )
+        discount += \
+            original_price_of_group - GROUP_DISCOUNT_OFFER['discounted_price']
+
+    return discount
+
+
+def grouper(iterable, n):
+    args = [iter(iterable)] * n
+    return zip(*args)
+
+def get_string_of_skus_in_offer(sku_counts, sku_ids_in_offer):
+    relevant_skus = [
+        k*v for k,v in sku_counts.items()
+        if k in GROUP_DISCOUNT_OFFER['sku_ids_in_offer']
+    ]
+    return ''.join(relevant_skus)
+
+def sorted_by_most_expensive_first(skus_string):
+    sorted_list = sorted(
+        skus_string,
+        key=lambda sku_id: SKUS[sku_id]['price'],
+        reverse=True
+    )
+    return ''.join(sorted_list)
 
 def get_basket_with_free_items_removed(
         sku_counts,
@@ -113,14 +158,14 @@ SKUS = {
     'L': {'price': 90},
     'M': {'price': 15},
     'O': {'price': 10},
-    'S': {'price': 30},
+    'S': {'price': 20},
     'T': {'price': 20},
     'W': {'price': 20},
-    'X': {'price': 90},
-    'Y': {'price': 10},
-    'Z': {'price': 50},
-    'K': {'price': 80, 'discount_offers': [
-        {'number_required': 2, 'discounted_price': 150},
+    'X': {'price': 17},
+    'Y': {'price': 20},
+    'Z': {'price': 21},
+    'K': {'price': 70, 'discount_offers': [
+        {'number_required': 2, 'discounted_price': 120},
     ]},
     'N': {'price': 40},
     'P': {'price': 50, 'discount_offers': [
@@ -167,6 +212,13 @@ GET_ONE_FREE_OFFERS = [
         'free_sku': 'Q'
     },
 ]
+
+
+GROUP_DISCOUNT_OFFER = {
+    'sku_ids_in_offer': ['S', 'T', 'X', 'Y', 'Z'],
+    'number_required': 3,
+    'discounted_price': 45
+}
 
 class InvalidSKUException(Exception):
     pass
