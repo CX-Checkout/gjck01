@@ -15,6 +15,7 @@ class MyTests (ParameterizedTestCase):
             ("C", 20),
             ("D", 15),
             ("E", 40),
+            ("F", 10),
         ]
     )
     def test_single_items(self, input, expected_output):
@@ -62,6 +63,17 @@ class MyTests (ParameterizedTestCase):
         ]
     )
     def test_special_offer_for_Es(self, input, expected_output):
+        self.assertEqual(checkout(input), expected_output)
+
+    @ParameterizedTestCase.parameterize(
+        ("input", "expected_output"),
+        [
+            ("FF", 20),
+            ("FFF", 20),
+            ("FFFF", 30),
+        ]
+    )
+    def test_special_offer_for_Fs(self, input, expected_output):
         self.assertEqual(checkout(input), expected_output)
 
     @ParameterizedTestCase.parameterize(
